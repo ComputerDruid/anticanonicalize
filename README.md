@@ -24,6 +24,6 @@ Well, it's fun!
 
 Also, this is theoretically useful as a tool to prove that some command does not rely on the absolute paths of its inputs. In general, I want that property in build systems because I want to be able to share build caches between multiple checkouts/worktrees.
 
-Unfortunately, in practice this breaks many many things, so it's unlikely you use this technique to prove anything about real builds.
+Unfortunately, in practice this breaks many many things, so it's unlikely you can use this technique to prove anything about real builds.
 
 Also, a given tool could have fallback logic to handle this case, so unless you always run your build with anticanonicalize, it still might rely on absolute paths when you don't run it that way.
