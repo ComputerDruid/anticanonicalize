@@ -2,7 +2,7 @@ use std::{
     io::IoSliceMut,
     mem::MaybeUninit,
     os::unix::process::CommandExt,
-    process::Command,
+    process::{Command, Stdio},
 };
 
 use rustix::{
@@ -12,7 +12,48 @@ use rustix::{
     },
 };
 
+fn sendcwd() {
+    use std::{
+        io::IoSlice,
+        mem::MaybeUninit,
+        os::fd::AsFd,
+        process::{Command, Stdio},
+    };
+
+    use rustix::{
+        fs::{Mode, OFlags, open},
+        io::fcntl_dupfd_cloexec,
+        net::{SendAncillaryBuffer, SendFlags, sendmsg},
+        stdio::dup2_stdout,
+    };
+
+    Command::new("mount")
+        .args(["--bind", ".", "/mnt/isolated"])
+        .stderr(Stdio::inherit())
+        .output()
+        .unwrap();
+    let f = open("/mnt/isolated", OFlags::PATH, Mode::empty()).unwrap();
+    let outfd =
+        fcntl_dupfd_cloexec(std::io::stdout(), 3).expect("getting new fd for output socket");
+    dup2_stdout(std::io::stderr()).unwrap();
+
+    let mut space = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(1))];
+    let to_send = [f.as_fd()];
+    let mut cmsg_buffer = SendAncillaryBuffer::new(&mut space);
+    cmsg_buffer.push(rustix::net::SendAncillaryMessage::ScmRights(&to_send));
+    sendmsg(
+        outfd,
+        &[IoSlice::new(b"DIRFD")],
+        &mut cmsg_buffer,
+        SendFlags::empty(),
+    )
+    .unwrap();
+}
+
 fn main() {
+    if std::env::var("_PLEASE_SEND_YOUR_CWD_TO_STDOUT").is_ok() {
+        return sendcwd();
+    }
     let program;
     let args;
     {
@@ -29,16 +70,19 @@ fn main() {
         None,
     )
     .unwrap();
-    Command::new("unshare")
-        .args([
-            "--map-root",
-            "--user",
-            "--mount",
-            "/home/cdruid/src/sendcwd/target/debug/sendcwd",
-        ])
+    let my_exe = std::path::PathBuf::from("/proc/self/exe")
+        .canonicalize()
+        .expect("/proc/self/exe should exist");
+    let status = Command::new("unshare")
+        .args(["--map-root", "--user", "--mount"])
+        .arg(my_exe)
+        .env("_PLEASE_SEND_YOUR_CWD_TO_STDOUT", "1")
         .stdout(write_sock)
+        .stderr(Stdio::inherit())
         .output()
-        .unwrap();
+        .unwrap()
+        .status;
+    assert!(status.success(), "error in unshare/sendcwd: {status:?}");
     let mut space = [MaybeUninit::uninit(); rustix::cmsg_space!(ScmRights(1))];
     let mut cmsg_buffer = RecvAncillaryBuffer::new(&mut space);
     let mut buf = [0u8; 256];
