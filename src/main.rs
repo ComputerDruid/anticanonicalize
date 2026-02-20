@@ -11,6 +11,7 @@ use rustix::{
         AddressFamily, RecvAncillaryBuffer, RecvFlags, SocketFlags, SocketType, recvmsg, socketpair,
     },
 };
+use tempfile::TempDir;
 
 fn sendcwd() {
     use std::{
@@ -27,12 +28,16 @@ fn sendcwd() {
         stdio::dup2_stdout,
     };
 
+    let tmp = TempDir::with_prefix("anticanonicalize-")
+        .expect("creating tempdir")
+        .keep();
     Command::new("mount")
-        .args(["--bind", ".", "/mnt/isolated"])
+        .args(["--bind", "."])
+        .arg(&tmp)
         .stderr(Stdio::inherit())
         .output()
         .unwrap();
-    let f = open("/mnt/isolated", OFlags::PATH, Mode::empty()).unwrap();
+    let f = open(tmp, OFlags::PATH, Mode::empty()).unwrap();
     let outfd =
         fcntl_dupfd_cloexec(std::io::stdout(), 3).expect("getting new fd for output socket");
     dup2_stdout(std::io::stderr()).unwrap();
