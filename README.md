@@ -9,6 +9,10 @@ Some things that don't work:
 - `anticanonicalize cargo check` (`error: Unable to proceed. Could not locate working directory.: No such file or directory (os error 2)
 `)
 
+To try it yourself, [get a rust toolchain] if you don't have one already and run `cargo install --git https://github.com/ComputerDruid/anticanonicalize`
+
+[get a rust toolchain]: https://rustup.rs/
+
 ## How?
 
 Basically:
